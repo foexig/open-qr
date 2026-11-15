@@ -9,13 +9,15 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    LargeBinary,
     String,
     Text,
     false,
     func,
     true,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, column_property, mapped_column, relationship
 
 
 def utcnow() -> datetime:
@@ -78,6 +80,12 @@ class QRCode(Base):
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     target_url: Mapped[str] = mapped_column(String(2048))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Visual style (see qr_image.QRStyle); NULL means the classic black-on-white look.
+    style: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Optional centre logo, always a re-encoded PNG (see qr_image.clean_logo). Deferred so
+    # list queries never load the bytes; has_logo is computed in SQL instead.
+    logo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
+    has_logo: Mapped[bool] = column_property(logo.is_not(None))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, server_default=func.now()
     )

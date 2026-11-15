@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from .qr_image import ErrorLevel, QRStyle
 from .security import MIN_PASSWORD_LENGTH
 from .util import validate_target_url
 
@@ -61,6 +62,7 @@ class QRCodeCreate(BaseModel):
     description: str = Field("", max_length=2000)
     target_url: str = Field(max_length=4096)
     is_active: bool = True
+    style: QRStyle | None = None
 
     @field_validator("name")
     @classmethod
@@ -83,6 +85,8 @@ class QRCodeUpdate(BaseModel):
     description: str | None = Field(None, max_length=2000)
     target_url: str | None = Field(None, max_length=4096)
     is_active: bool | None = None
+    # Explicit null resets to the classic style.
+    style: QRStyle | None = None
 
     @field_validator("name")
     @classmethod
@@ -112,3 +116,11 @@ class QRCodeOut(BaseModel):
     updated_at: datetime
     scan_count: int = 0
     last_scan_at: datetime | None = None
+    style: QRStyle
+    has_logo: bool = False
+
+
+class StylePreviewIn(BaseModel):
+    style: QRStyle
+    ec: ErrorLevel = "M"
+    border: int = Field(4, ge=0, le=20)

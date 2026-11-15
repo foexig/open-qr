@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -12,8 +12,8 @@ from .. import stats
 from ..config import get_settings
 from ..deps import DB, CurrentUser
 from ..models import QRCode, Scan
-from ..qr_image import ErrorLevel, render
-from ..schemas import QRCodeCreate, QRCodeOut, QRCodeUpdate
+from ..qr_image import DEFAULT_STYLE, LOGO_MAX_BYTES, ErrorLevel, LogoError, QRStyle, clean_logo, render
+from ..schemas import QRCodeCreate, QRCodeOut, QRCodeUpdate, StylePreviewIn
 from ..util import generate_code
 
 router = APIRouter(prefix="/api", tags=["qr-codes"])
@@ -36,6 +36,20 @@ def _with_counts(stmt_filter) -> Select:
     )
 
 
+def _style(qr: QRCode) -> QRStyle:
+    if not qr.style:
+        return DEFAULT_STYLE
+    try:
+        return QRStyle.model_validate(qr.style)
+    except ValueError:
+        # Stored by an incompatible version; fall back instead of breaking the whole list.
+        return DEFAULT_STYLE
+
+
+def _store_style(style: QRStyle | None) -> dict | None:
+    return None if style is None or style.is_default() else style.model_dump()
+
+
 def _out(qr: QRCode, scan_count: int = 0, last_scan_at: datetime | None = None) -> QRCodeOut:
     return QRCodeOut(
         id=qr.id,
@@ -49,6 +63,8 @@ def _out(qr: QRCode, scan_count: int = 0, last_scan_at: datetime | None = None) 
         updated_at=qr.updated_at,
         scan_count=scan_count,
         last_scan_at=last_scan_at,
+        style=_style(qr),
+        has_logo=qr.has_logo,
     )
 
 
@@ -103,6 +119,7 @@ def create_qr_code(payload: QRCodeCreate, user: CurrentUser, db: DB) -> QRCodeOu
             description=payload.description,
             target_url=payload.target_url,
             is_active=payload.is_active,
+            style=_store_style(payload.style),
             user_id=user.id,
         )
         db.add(qr)
@@ -126,7 +143,9 @@ def get_qr_code(qr_id: int, user: CurrentUser, db: DB) -> QRCodeOut:
 @router.patch("/qr-codes/{qr_id}", response_model=QRCodeOut)
 def update_qr_code(qr_id: int, payload: QRCodeUpdate, user: CurrentUser, db: DB) -> QRCodeOut:
     qr = _get_owned(db, user.id, qr_id)
-    data = payload.model_dump(exclude_unset=True, exclude_none=True)
+    data = payload.model_dump(exclude_unset=True, exclude_none=True, exclude={"style"})
+    if "style" in payload.model_fields_set:
+        qr.style = _store_style(payload.style)
     if "target_url" in data:
         _reject_self_redirect(data["target_url"])
     for key, value in data.items():
@@ -160,12 +179,56 @@ def qr_image(
     download: bool = False,
 ) -> Response:
     qr = _get_owned(db, user.id, qr_id)
-    content = render(get_settings().short_url(qr.code), fmt, size, ec, border)
+    content = render(get_settings().short_url(qr.code), fmt, size, ec, border, _style(qr), qr.logo)
     headers = {"Cache-Control": "private, max-age=300"}
     if download:
         headers["Content-Disposition"] = f'attachment; filename="{_filename(qr.name, qr.code, fmt)}"'
     media = "image/png" if fmt == "png" else "image/svg+xml"
     return Response(content, media_type=media, headers=headers)
+
+
+@router.post("/qr-codes/{qr_id}/preview.svg")
+def qr_preview(qr_id: int, payload: StylePreviewIn, user: CurrentUser, db: DB) -> Response:
+    """Render an unsaved style, so the editor can show changes before they are stored."""
+    qr = _get_owned(db, user.id, qr_id)
+    content = render(
+        get_settings().short_url(qr.code),
+        "svg",
+        512,
+        payload.ec,
+        payload.border,
+        payload.style,
+        qr.logo,
+    )
+    return Response(content, media_type="image/svg+xml")
+
+
+@router.put("/qr-codes/{qr_id}/logo", response_model=QRCodeOut)
+async def upload_logo(qr_id: int, request: Request, user: CurrentUser, db: DB) -> QRCodeOut:
+    """Upload a centre logo as the raw request body (image/png or image/jpeg)."""
+    qr = _get_owned(db, user.id, qr_id)
+    ctype = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if ctype not in ("image/png", "image/jpeg"):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Logo must be PNG or JPEG")
+    raw = b""
+    async for chunk in request.stream():
+        raw += chunk
+        if len(raw) > LOGO_MAX_BYTES:
+            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Logo must be at most 512 KB")
+    try:
+        qr.logo = clean_logo(raw)
+    except LogoError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    db.commit()
+    return get_qr_code(qr_id, user, db)
+
+
+@router.delete("/qr-codes/{qr_id}/logo", response_model=QRCodeOut)
+def delete_logo(qr_id: int, user: CurrentUser, db: DB) -> QRCodeOut:
+    qr = _get_owned(db, user.id, qr_id)
+    qr.logo = None
+    db.commit()
+    return get_qr_code(qr_id, user, db)
 
 
 @router.get("/qr-codes/{qr_id}/stats")
