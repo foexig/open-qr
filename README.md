@@ -15,6 +15,9 @@ No SaaS, no tracking pixels, no proprietary dependencies. One `docker compose up
 - **Dynamic QR codes**: create, edit, rename, change the target URL, activate/deactivate, delete
 - **Instant updates**: a changed target applies to the very next scan (no caching of redirects)
 - **Random, non-sequential codes** (`/r/a8X92kP`) without look-alike characters (`0/O`, `1/l/I`)
+- **Styled codes**: dot, rounded and bar modules, custom corner frames and centres, ink and
+  paper colours, linear/radial gradients and an optional centre logo, with a live preview and
+  presets (Classic, Ink dots, Riso, Blueprint, Candy, Barcode) and a warning when contrast gets too low to scan
 - **Downloads** as PNG or SVG with configurable size, quiet zone and error correction (L/M/Q/H)
 - **Analytics**: total scans, scans per day/week/month, last scan, charts, device class,
   browser family and referrer host, with likely bots/link previews flagged separately

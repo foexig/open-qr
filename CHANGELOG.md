@@ -6,6 +6,15 @@ project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- QR code styles: module shapes, corner frame and centre shapes, colours, gradients, transparent background
+- Centre logo upload (PNG/JPEG, up to 512 KB); forces error correction H
+- Style studio with live preview, presets and a scan-contrast warning
+
+### Changed
+- Redesigned dashboard with a print-proof look, self-hosted Archivo font and new favicon
+- Frontend uses relative paths, so the app also works under a sub-path
+
 ## [0.1.0] - 2026-11-15
 
 ### Added
