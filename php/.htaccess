@@ -1,0 +1,23 @@
+# open-qr (PHP edition)
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Internal folders are never served directly.
+  RewriteRule ^(data|lib)(/|$) - [F,L]
+  # Everything that is not a real file goes to index.php.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# Fallback if mod_rewrite is off: still hide databases and config.
+<FilesMatch "\.(sqlite|sqlite3|db|lock|tmp.*)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+  </IfModule>
+</FilesMatch>
