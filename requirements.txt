@@ -1,0 +1,12 @@
+# Pinned to the versions the test suite runs against. Dependabot/Renovate can bump these.
+fastapi==0.163.0
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.0.57
+psycopg[binary]==3.3.9
+alembic==1.20.1
+pydantic==2.14.3
+pydantic-settings==2.16.3
+email-validator==2.4.0
+argon2-cffi==25.1.0
+qrcode[pil]==8.2
+pillow==13.0.0

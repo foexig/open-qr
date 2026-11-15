@@ -1,0 +1,30 @@
+# Runs the test suite against a throwaway PostgreSQL (data in tmpfs).
+# Usage: scripts/test.sh
+name: open-qr-test
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: openqr_test
+      POSTGRES_USER: openqr
+      POSTGRES_PASSWORD: test-only-password
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openqr -d openqr_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  tests:
+    build:
+      context: .
+      target: test
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TEST_DATABASE_URL: postgresql+psycopg://openqr:test-only-password@db:5432/openqr_test
+    tmpfs:
+      - /tmp

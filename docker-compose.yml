@@ -1,0 +1,61 @@
+# open-qr: app + PostgreSQL. Configure via .env (see .env.example).
+name: open-qr
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openqr
+      POSTGRES_USER: openqr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (start.sh does this for you)}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openqr -d openqr"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # No ports: the database is only reachable from the app container.
+
+  app:
+    build:
+      context: .
+      target: runtime
+    image: open-qr:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://openqr:${POSTGRES_PASSWORD}@db:5432/openqr
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      CODE_LENGTH: ${CODE_LENGTH:-7}
+      SESSION_LIFETIME_HOURS: ${SESSION_LIFETIME_HOURS:-168}
+      STORE_USER_AGENT: ${STORE_USER_AGENT:-false}
+      STORE_REFERRER: ${STORE_REFERRER:-true}
+      STATS_TIMEZONE: ${STATS_TIMEZONE:-UTC}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8000}:8000"
+    networks:
+      - internal
+      - web
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  db-data:
+
+networks:
+  internal:
+    internal: true
+  web:

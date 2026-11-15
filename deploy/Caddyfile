@@ -1,0 +1,6 @@
+# Example Caddy config: automatic HTTPS with zero extra setup.
+# In .env set PUBLIC_BASE_URL=https://qr.example.com, then run: caddy run
+qr.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8000
+}
